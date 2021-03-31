@@ -1,39 +1,42 @@
 package com.example.flatload
 
 import android.Manifest
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.Address
 import android.location.Geocoder
-import android.os.AsyncTask
 import android.os.Bundle
 import android.os.Looper
 import android.util.Log
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import com.google.android.gms.location.*
 import com.google.android.gms.maps.model.LatLng
+import com.mapbox.api.directions.v5.DirectionsCriteria
 import com.mapbox.api.directions.v5.MapboxDirections
+import com.mapbox.api.directions.v5.models.DirectionsResponse
 import com.mapbox.api.directions.v5.models.DirectionsRoute
 import com.mapbox.geojson.Point
 import kotlinx.android.synthetic.main.activity_input_way.*
-import org.json.JSONObject
-import java.io.*
-import java.net.HttpURLConnection
-import java.net.MalformedURLException
-import java.net.URL
+import retrofit2.Call
+import retrofit2.Callback
+import retrofit2.Response
 import java.util.*
 
 
 class InputWayActivity : AppCompatActivity() { //출발지 도착지 입력 화면 - gps 허용 추가
 
-    //direction api 추가
+    private val TAG = "DirectionActivity"
     val LOAD_SUCCESS = 101
     private val currentRoute: DirectionsRoute? = null
     private val client: MapboxDirections? = null
-    var origin = Point.fromLngLat(126.831789, 37.319712)
-    var destination = Point.fromLngLat(126.846327, 37.317648)
+
+    var origin = Point.fromLngLat(0.0,0.0)
+    var destination = Point.fromLngLat(0.0, 0.0)
+
+    //private var textviewJSONText: TextView? = null
+
 
     var fusedLocationClient: FusedLocationProviderClient?= null
     var loc= LatLng(0.0,0.0)
@@ -91,9 +94,12 @@ class InputWayActivity : AppCompatActivity() { //출발지 도착지 입력 화�
                     val lat = startLoc.latitude
                     val log = startLoc.longitude
 
-                    val startPoint = Point.fromLngLat(startLoc.latitude,startLoc.longitude) //출발 좌표 포인트
-                    val endPoint = Point.fromLngLat(endLoc.latitude,endLoc.longitude) //목적 좌표 포인트
+                    origin = Point.fromLngLat(startLoc.longitude,startLoc.latitude) //출발 좌표 포인트
+                    destination = Point.fromLngLat(endLoc.longitude,endLoc.latitude) //목적 좌표 포인트
+                    Log.i("start point", origin.toString())
+                    Log.i("end point", destination.toString())
 
+                    getRoute(origin, destination)
 
                     //JSONTask(startLoc,endLoc).execute("http://192.168.0.8:3000/post") //로컬 서버로 좌표 보내기
                     //mapactivity 이동
@@ -113,6 +119,45 @@ class InputWayActivity : AppCompatActivity() { //출발지 도착지 입력 화�
                 editTextEnd.text.clear()
             }
         }
+    }
+
+    private fun getRoute(origin: Point, destination: Point) {
+        val client = MapboxDirections.builder() //builder 패턴 방식으로 MapboxDirections 클래스의 객체룰 생성. builder 패턴에서는 변수의 순서가 바뀌면 안됨
+            .origin(origin)
+            .destination(destination)
+            .profile(DirectionsCriteria.PROFILE_WALKING)
+            .steps(true)
+            .accessToken(getString(R.string.access_token))
+            .build()
+
+        //응답처리
+
+        client?.enqueueCall(object : Callback<DirectionsResponse> {
+            override fun onResponse(call: Call<DirectionsResponse>, response: Response<DirectionsResponse>) {
+
+                if (response.body() == null) {
+                    Log.i("error", "No routes found, make sure you set the right user and access token.")
+                    return
+                } else if (response.body()!!.routes().size < 1) {
+                    Log.i("error", "No routes found")
+                    return
+                }
+
+                // Get the directions route
+                //val Response = response
+
+                //val currentRoute = Response.body()!!.routes()[0]
+                //textviewJSONText.setText(response.body().toJson(),0,100)
+                //textviewJSONText?.setText(response.body().toString())
+                textviewJSONText?.setText(response.body()!!.toJson())
+            }
+
+            override fun onFailure(call: Call<DirectionsResponse>, throwable: Throwable) {
+                Log.i("error", "Error: " + throwable.message)
+
+            }
+        }
+        )
     }
 
     /*
@@ -190,7 +235,6 @@ class InputWayActivity : AppCompatActivity() { //출발지 도착지 입력 화�
         }
 
     }*/
-
     private fun startLocationUpdates() { //gps 관련
         locationRequest = LocationRequest.create()?.apply {
             interval= 10000
