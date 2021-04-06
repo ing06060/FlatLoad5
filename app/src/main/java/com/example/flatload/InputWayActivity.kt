@@ -7,7 +7,6 @@ import android.location.Geocoder
 import android.os.Bundle
 import android.os.Looper
 import android.util.Log
-import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -19,10 +18,13 @@ import com.mapbox.api.directions.v5.models.DirectionsResponse
 import com.mapbox.api.directions.v5.models.DirectionsRoute
 import com.mapbox.geojson.Point
 import kotlinx.android.synthetic.main.activity_input_way.*
+import org.json.JSONObject
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
 import java.util.*
+
+//import com.mapbox.search.MapboxSearchSdk
 
 
 class InputWayActivity : AppCompatActivity() { //출발지 도착지 입력 화면 - gps 허용 추가
@@ -35,8 +37,8 @@ class InputWayActivity : AppCompatActivity() { //출발지 도착지 입력 화�
     var origin = Point.fromLngLat(0.0,0.0)
     var destination = Point.fromLngLat(0.0, 0.0)
 
-    //private var textviewJSONText: TextView? = null
 
+    //private var textviewJSONText: TextView? = null
 
     var fusedLocationClient: FusedLocationProviderClient?= null
     var loc= LatLng(0.0,0.0)
@@ -57,9 +59,11 @@ class InputWayActivity : AppCompatActivity() { //출발지 도착지 입력 화�
     private fun init() {
         //처음에 gps 허용
         //내위치 누르면 현재 위치로 설정
-        //확인 버튼 누르면 출발지, 도착지 -> 위도 경도로 변경 -> json 객체 만들기 -> MapActivity
+        //확인 버튼 누르면 출발지, 도착지 -> 위도 경도로 변경 -> json 객
+        // 체 만들기 -> MapActivity
 
         val mgeocorder: Geocoder = Geocoder(this, Locale.getDefault())
+        //val getPointFromGeoCoder("서울특별시 송파구 방이동 112-1");
         initLocation() //gps 설정
 
         button3.setOnClickListener { //내 위치 버튼
@@ -76,10 +80,13 @@ class InputWayActivity : AppCompatActivity() { //출발지 도착지 입력 화�
             val end = editTextEnd.text.toString()
 
             if(start.isNotEmpty() && end.isNotEmpty()) {
+
                 mStartResultLocation = mgeocorder.getFromLocationName(start, 1)
                 mEndResultLocation = mgeocorder.getFromLocationName(end, 1)
 
                 if(mStartResultLocation.isNotEmpty() && mEndResultLocation.isNotEmpty()){
+                //if(origin != emptyPoint && destination != emptyPoint){ //지오코딩 함수가 리턴되면
+
                     val startLat = mStartResultLocation.get(0).latitude
                     val startLng = mStartResultLocation.get(0).longitude
                     startLoc = LatLng(startLat, startLng)
@@ -96,6 +103,8 @@ class InputWayActivity : AppCompatActivity() { //출발지 도착지 입력 화�
 
                     origin = Point.fromLngLat(startLoc.longitude,startLoc.latitude) //출발 좌표 포인트
                     destination = Point.fromLngLat(endLoc.longitude,endLoc.latitude) //목적 좌표 포인트
+
+
                     Log.i("start point", origin.toString())
                     Log.i("end point", destination.toString())
 
@@ -122,16 +131,24 @@ class InputWayActivity : AppCompatActivity() { //출발지 도착지 입력 화�
     }
 
     private fun getRoute(origin: Point, destination: Point) {
-        val client = MapboxDirections.builder() //builder 패턴 방식으로 MapboxDirections 클래스의 객체룰 생성. builder 패턴에서는 변수의 순서가 바뀌면 안됨
-            .origin(origin)
-            .destination(destination)
-            .profile(DirectionsCriteria.PROFILE_WALKING)
+        //변수 선언
+        //var getrouteSteps = <Steps>()
+        //var getrouteSteps = Steps()
+
+        var pairList = mutableListOf<Pair<Double,Double>>()
+
+        //맵박스 길찾기 요청
+        val client = MapboxDirections.builder() //builder 패턴 방식으로 MapboxDirections 클래스의 객체룰 생성. 변수의 순서 바뀌면 안됨
+            .origin(origin) //출발지
+            .destination(destination) //목적지
+            .overview(DirectionsCriteria.OVERVIEW_FULL)
+            .profile(DirectionsCriteria.PROFILE_WALKING) //교통, 운전, 걷기, 사이클링
             .steps(true)
+            //.geometries("geojson")
             .accessToken(getString(R.string.access_token))
             .build()
 
-        //응답처리
-
+        //길찾기 응답
         client?.enqueueCall(object : Callback<DirectionsResponse> {
             override fun onResponse(call: Call<DirectionsResponse>, response: Response<DirectionsResponse>) {
 
@@ -144,12 +161,45 @@ class InputWayActivity : AppCompatActivity() { //출발지 도착지 입력 화�
                 }
 
                 // Get the directions route
-                //val Response = response
+                val currentRoute = response.body()!!.routes()[0]
 
-                //val currentRoute = Response.body()!!.routes()[0]
-                //textviewJSONText.setText(response.body().toJson(),0,100)
-                //textviewJSONText?.setText(response.body().toString())
-                textviewJSONText?.setText(response.body()!!.toJson())
+                //textviewJSONText?.setText(response.body()!!.toJson())
+
+                val jsonString = response.body()!!.toJson().trimIndent()//json 형식으로 바꿔서 string에 저장
+                val jsonObject = JSONObject(jsonString)
+                val jsonArray = jsonObject.getJSONArray("routes")
+                val subjsonObject = jsonArray.getJSONObject(0) //route 배열의 index = 0
+                val subjsonArray = subjsonObject.getJSONArray("legs")
+                val subjsonObject2 = subjsonArray.getJSONObject(0)//legs 배열의 index = 0
+                val subjsonArray2 = subjsonObject2.getJSONArray("steps")
+
+                var cnt:Int = 0
+
+                //json 파싱 intersection
+                for( i in 0..subjsonArray2.length()-1){ //step배열의 index 0 부터 끝까지
+                    val iObject = subjsonArray2.getJSONObject(i) //index i 의 값을 객체로 생성
+                    val iArray =iObject.getJSONArray("intersections") //intersection 배열
+
+                    for (j in 0..iArray.length()-1){
+                        val jObject =iArray.getJSONObject(j)
+                        val location =jObject.getJSONArray("location") //intersection 배열의 location 값을 얻어옴
+
+                        println("${i+1}번째 intersections ${j+1}번째 location"+location)
+
+                        val pair = Pair(location[0].toString().toDouble(), location[1].toString().toDouble())
+                        pairList.add(cnt, pair)
+                        cnt = cnt + 1
+                    }
+                }
+
+                var a: String = ""
+                for(i in 0..pairList.size-1){
+                    a = a + pairList.get(i).toString() + "\n"
+                }
+
+                textviewJSONText?.setText(a) //textview로 띄움
+
+
             }
 
             override fun onFailure(call: Call<DirectionsResponse>, throwable: Throwable) {
@@ -158,6 +208,7 @@ class InputWayActivity : AppCompatActivity() { //출발지 도착지 입력 화�
             }
         }
         )
+
     }
 
     /*
@@ -322,3 +373,4 @@ class InputWayActivity : AppCompatActivity() { //출발지 도착지 입력 화�
         }
     }
 }
+
