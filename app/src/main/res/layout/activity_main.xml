@@ -29,4 +29,13 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/textView" />
 
+    <Button
+        android:id="@+id/testBtn"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="21dp"
+        android:text="임시지도"
+        app:layout_constraintStart_toStartOf="@+id/mapBtn"
+        app:layout_constraintTop_toBottomOf="@+id/mapBtn" />
+
 </androidx.constraintlayout.widget.ConstraintLayout>

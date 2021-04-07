@@ -17,5 +17,10 @@ class MainActivity : AppCompatActivity() {
             val i = Intent(this,InputWayActivity::class.java)
             startActivity(i)
         }
+        testBtn.setOnClickListener {
+            val i = Intent(this,MapActivity::class.java)
+            startActivity(i)
+        }
     }
+
 }

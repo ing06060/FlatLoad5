@@ -47,11 +47,16 @@ dependencies {
     implementation 'com.mapbox.mapboxsdk:mapbox-sdk-services:5.8.0'
     implementation 'com.mapbox.mapboxsdk:mapbox-sdk-core:5.8.0'
     //implementation 'com.mapbox.mapboxsdk:mapbox-android-sdk:9.6.1'
-    //implementation 'com.mapbox.mapboxsdk:mapbox-android-sdk:6.1.3'
+    implementation 'com.mapbox.mapboxsdk:mapbox-android-sdk:6.1.3'
+    implementation 'com.mapbox.mapboxsdk:mapbox-sdk-turf:5.8.0'
 
     //implementation 'androidx.annotation:annotation:1.2.0'
-
-
+/*
+    implementation 'com.mapbox.mapboxsdk:mapbox-android-sdk:9.2.0'
+    implementation 'com.mapbox.mapboxsdk:mapbox-android-plugin-annotation-v9:0.9.0'
+*/
+    //noinspection GradleCompatible
+    implementation 'com.android.support:localbroadcastmanager:28.0.0'
     implementation 'com.squareup.retrofit2:retrofit:2.7.2'
     implementation 'com.squareup.retrofit2:converter-gson:2.7.2'
 

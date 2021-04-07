@@ -36,8 +36,6 @@ class InputWayActivity : AppCompatActivity() { //출발지 도착지 입력 화�
 
     var origin = Point.fromLngLat(0.0,0.0)
     var destination = Point.fromLngLat(0.0, 0.0)
-
-
     //private var textviewJSONText: TextView? = null
 
     var fusedLocationClient: FusedLocationProviderClient?= null
@@ -129,7 +127,6 @@ class InputWayActivity : AppCompatActivity() { //출발지 도착지 입력 화�
             }
         }
     }
-
     private fun getRoute(origin: Point, destination: Point) {
         //변수 선언
         //var getrouteSteps = <Steps>()
@@ -210,7 +207,6 @@ class InputWayActivity : AppCompatActivity() { //출발지 도착지 입력 화�
         )
 
     }
-
     /*
     //서버로 좌표 보내는 AsynTask
     public class JSONTask(startLoc: LatLng, endLoc: LatLng) : AsyncTask<String?, String?, String?>() {
@@ -284,7 +280,6 @@ class InputWayActivity : AppCompatActivity() { //출발지 도착지 입력 화�
              //서버로 부터 받은 값을 출력해주는 부분
             Log.i("After send to server", result)
         }
-
     }*/
     private fun startLocationUpdates() { //gps 관련
         locationRequest = LocationRequest.create()?.apply {
@@ -352,7 +347,6 @@ class InputWayActivity : AppCompatActivity() { //출발지 도착지 입력 화�
         fusedLocationClient?.lastLocation?.addOnSuccessListener {//성공적으로 위치 가져왔으면?
             loc = LatLng(it.latitude,it.longitude) //현재위치로 위치정보를 바꾸겠다
             Log.i("currentLocation",loc.toString())
-
         }
     }
 
