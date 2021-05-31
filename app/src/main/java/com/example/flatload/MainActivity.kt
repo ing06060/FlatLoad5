@@ -21,6 +21,10 @@ class MainActivity : AppCompatActivity() {
             val i = Intent(this,MapActivity::class.java)
             startActivity(i)
         }
+        testGetBtn.setOnClickListener{
+            val i = Intent(this,TestGetServerActivity::class.java)
+            startActivity(i)
+        }
     }
 
 }

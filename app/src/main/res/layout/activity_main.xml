@@ -38,4 +38,14 @@
         app:layout_constraintStart_toStartOf="@+id/mapBtn"
         app:layout_constraintTop_toBottomOf="@+id/mapBtn" />
 
+    <Button
+        android:id="@+id/testGetBtn"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="37dp"
+        android:text="서버에서 json 받기"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/testBtn" />
+
 </androidx.constraintlayout.widget.ConstraintLayout>

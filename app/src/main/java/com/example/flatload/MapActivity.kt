@@ -1,190 +1,263 @@
 package com.example.flatload
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Color
-import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
-import com.mapbox.api.directions.v5.DirectionsCriteria
-import com.mapbox.api.directions.v5.MapboxDirections
-import com.mapbox.api.directions.v5.models.DirectionsResponse
-import com.mapbox.api.directions.v5.models.DirectionsRoute
-import com.mapbox.core.constants.Constants
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import com.mapbox.android.core.permissions.PermissionsListener
+import com.mapbox.android.core.permissions.PermissionsManager
+import com.mapbox.geojson.Feature
+import com.mapbox.geojson.FeatureCollection
 import com.mapbox.geojson.LineString
 import com.mapbox.geojson.Point
 import com.mapbox.mapboxsdk.Mapbox
-import com.mapbox.mapboxsdk.annotations.MarkerOptions
-import com.mapbox.mapboxsdk.annotations.PolylineOptions
-import com.mapbox.mapboxsdk.camera.CameraUpdateFactory
 import com.mapbox.mapboxsdk.geometry.LatLng
+import com.mapbox.mapboxsdk.location.LocationComponentActivationOptions
+import com.mapbox.mapboxsdk.location.LocationComponentOptions
+import com.mapbox.mapboxsdk.location.modes.CameraMode
+import com.mapbox.mapboxsdk.location.modes.RenderMode
 import com.mapbox.mapboxsdk.maps.MapView
 import com.mapbox.mapboxsdk.maps.MapboxMap
 import com.mapbox.mapboxsdk.maps.OnMapReadyCallback
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
+import com.mapbox.mapboxsdk.maps.Style
+import com.mapbox.mapboxsdk.plugins.annotation.OnSymbolClickListener
+import com.mapbox.mapboxsdk.plugins.annotation.Symbol
+import com.mapbox.mapboxsdk.plugins.annotation.SymbolManager
+import com.mapbox.mapboxsdk.plugins.annotation.SymbolOptions
+import com.mapbox.mapboxsdk.plugins.localization.LocalizationPlugin
+import com.mapbox.mapboxsdk.plugins.localization.MapLocale
+import com.mapbox.mapboxsdk.style.layers.LineLayer
+import com.mapbox.mapboxsdk.style.layers.Property
+import com.mapbox.mapboxsdk.style.layers.PropertyFactory
+import com.mapbox.mapboxsdk.style.sources.GeoJsonSource
+import com.mapbox.mapboxsdk.utils.BitmapUtils
 
-class MapActivity : AppCompatActivity(), OnMapReadyCallback {
+class MapActivity : AppCompatActivity(),PermissionsListener,OnMapReadyCallback {
+
     private var mapView: MapView? = null
-    private var map: MapboxMap? = null
-    private var currentRoute: DirectionsRoute? = null
-    private var client: MapboxDirections? = null
-    //var destinationX=0.0  // longitude
-    //var destinationY=0.0 // latitude
+    private lateinit var routeCoordinates: ArrayList<Point>
+    private var permissionsManager: PermissionsManager? = null
+    private var mapboxMap: MapboxMap? = null
+    private lateinit var LocList: PairList
 
-    // 내 gps 위치 (임의지정)
-    val origin: Point = Point.fromLngLat(126.831478, 37.3200456)
-    // 도착지 gps 위치
-    //val destination: Point = Point.fromLngLat(destinationX, destinationY)
-    val destination: Point = Point.fromLngLat(126.848678, 37.3167894)
+    private val SOURCE_ID = "SOURCE_ID"
+    private val ICON_ID = "ICON_ID"
+    private val LAYER_ID = "LAYER_ID"
+
+    private val MAKI_ICON_CAFE = "cafe-15"
+    private val MAKI_ICON_HARBOR = "harbor-15"
+    private val MAKI_ICON_AIRPORT = "airport-15"
+    private val MAKI_ICON_BARRIER = "barrier-15"
+    private var symbolManager: SymbolManager? = null
+    private var symbol: Symbol? = null
+
+    private var localizationPlugin: LocalizationPlugin? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_map)
-
-        // 맵박스 사용하기 위한 접근 토큰 지정
         Mapbox.getInstance(this, getString(R.string.access_token))
-        // 아래 함수로 통해 목적지 주소값을 위도 경도 값으로 변경
-        // getPointFromGeoCoder("서울특별시 송파구 방이동 112-1")
 
+        setContentView(R.layout.activity_map)
+        val i = intent
+        LocList = i.getSerializableExtra("pairList") as PairList
+
+        Log.i("pairList", LocList.toString())
+        initRouteCoordinates(LocList)
         mapView = findViewById(R.id.mapView)
         mapView?.onCreate(savedInstanceState)
         mapView?.getMapAsync(this)
-
     }
 
-    override fun onMapReady(mapboxMap: MapboxMap?) {
-        this.map = mapboxMap
-        // 카메라 위치 고정(내 gps 위치로 임의지정)
-        map?.animateCamera(
-            CameraUpdateFactory.newLatLngZoom( // 카메라는 반대의 값으로 적어줄 것
-                // 뒤에 숫자 15은 카메라 확대 배수이다( 15가 적당 )
-                LatLng(37.3200456, 126.831478), 15.0
-            )
-        )
-        // Add origin and destination to the map
-        mapboxMap?.addMarker(
-            MarkerOptions()
-                .position(
-                    LatLng(
-                        origin.latitude(),
-                        origin.longitude()
-                    )
-                ) // 타이틀은 상호명 건물명, snippet은 설명 그에 대한 설명이다
-                // 출발지
-                .title("출발지")
-                .snippet("start")
-        )
-        mapboxMap?.addMarker(
-            MarkerOptions() // 목적지
-                .position(
-                    LatLng(
-                        destination.latitude(),
-                        destination.longitude()
-                    )
+    private fun initRouteCoordinates(locList: PairList) {
+        //routeCoordinates: ArrayList<Point>? = null
+        Log.i("확인", locList.toString())
+        Log.i("확인", locList.pairList.size.toString())
+        Log.i("확인", locList.pairList[0].first.toString())
+        Log.i("확인", locList.pairList[0].second.toString())
+
+        routeCoordinates = ArrayList<Point>()
+        for (i in 0..locList.pairList.size-1){
+            routeCoordinates.add(Point.fromLngLat(locList.pairList[i].first,locList.pairList[i].second))
+            Log.i("LocList 확인:", routeCoordinates.get(i).toString())
+        }
+
+        Log.i("LocList 확인:",routeCoordinates.toString())
+//        // Create a list to store our line coordinates.
+//        routeCoordinates = ArrayList<Point>()
+//        routeCoordinates?.add(Point.fromLngLat(127.074475, 37.547962))
+    }
+
+    override fun onMapReady(mapboxMap: MapboxMap) {
+        this.mapboxMap = mapboxMap
+
+        mapboxMap?.setStyle(Style.MAPBOX_STREETS, object: Style.OnStyleLoaded {
+            override fun onStyleLoaded(style: Style) {
+                // 언어 설정
+                localizationPlugin = LocalizationPlugin(mapView!!, mapboxMap, style)
+                localizationPlugin!!.setMapLanguage(MapLocale.KOREA)
+
+                // 마커 추가
+                symbolManager = SymbolManager(mapView!!, mapboxMap, style)
+
+                symbolManager!!.iconAllowOverlap = true
+                symbolManager!!.textAllowOverlap = true
+                // Add symbol at specified lat/lon
+
+                symbol = symbolManager!!.create(
+                    SymbolOptions()
+                        .withLatLng(LatLng(37.547147, 127.074148)) //위험 요소 마커 추가
+                        .withIconImage(MAKI_ICON_HARBOR)
+                        .withIconSize(2.0f)
+                        .withDraggable(true)
                 )
-                .title("도착지")
-                .snippet("end")
-        )
-        // Get route from API
-        getRoute(origin, destination)
-    }
-    private fun getRoute(
-        origin: Point,
-        destination: Point
-    ) {
-        client = MapboxDirections.builder()
-            .origin(origin)
-            .destination(destination)
-            .overview(DirectionsCriteria.OVERVIEW_FULL)
-            .profile(DirectionsCriteria.PROFILE_WALKING)
-            .accessToken(getString(R.string.access_token))
-            .build()
-
-        client?.enqueueCall(object : Callback<DirectionsResponse> {
-            override fun onResponse(
-                call: Call<DirectionsResponse>,
-                response: Response<DirectionsResponse>
-            ) {
-                //System.out.println(call.request().url().toString())
-                // You can get the generic HTTP info about the response
-                //Log.i("Map", "Response code: " + response.code())
-                if (response.body() == null) {
-                    Log.i("response_null","No routes found, make sure you set the right user and access token.")
-                    return
-                } else if (response.body()!!.routes().size < 1) {
-                    Log.i("response_small", "No routes found")
-                    return
-                }
-                // Print some info about the route
-                currentRoute = response.body()!!.routes().get(0)
-                Log.i("complete", "Distance: " + currentRoute?.distance())
-                // Draw the route on the map
-                drawRoute(currentRoute!!)
-            }
-
-            override fun onFailure(
-                call: Call<DirectionsResponse?>?,
-                throwable: Throwable
-            ) {
-                Log.e("fail", "Error: " + throwable.message)
-                Toast.makeText(this@MapActivity, "Error: " + throwable.message, Toast.LENGTH_SHORT).show()
+                symbolManager!!.addClickListener(object : OnSymbolClickListener {
+                    override fun onAnnotationClick(symbol: Symbol): Boolean {
+                        Toast.makeText(
+                            this@MapActivity,
+                            "click marker symbol", Toast.LENGTH_SHORT
+                        ).show()
+                        //symbol.iconImage = MAKI_ICON_CAFE
+                        //symbolManager!!.update(symbol)
+//                        val i = Intent(this,MapActivity::class.java)
+//                        startActivity(i)
+                        changeActivity(symbol.latLng)
+                        return true
+                    }
+                })
+                enableLocationComponent(style)
+                // Create the LineString from the list of coordinates and then make a GeoJSON
+                // FeatureCollection so we can add the line to our map as a layer.
+                style.addSource(
+                    GeoJsonSource("line-source",
+                        FeatureCollection.fromFeatures(arrayOf(
+                            Feature.fromGeometry(
+                                LineString.fromLngLats(routeCoordinates!!)
+                            ))))
+                )
+                // The layer properties for our line. This is where we make the line dotted, set the
+                // color, etc.
+                style.addLayer(
+                    LineLayer("linelayer", "line-source").withProperties(
+                        PropertyFactory.lineDasharray(arrayOf(0.01f, 2f)),
+                        PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+                        PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+                        PropertyFactory.lineWidth(5f),
+                        PropertyFactory.lineColor(Color.parseColor("#e55e5e"))
+                    ))
             }
         })
     }
-    private fun drawRoute(route: DirectionsRoute) {
-        val lineString = LineString.fromPolyline(route.geometry()!!, Constants.PRECISION_6)
-        val coordinates = lineString.coordinates()
-        val points = ArrayList<LatLng>(coordinates.size)
-        //val points : MutableList<LatLng> = mutableListOf(LatLng(0.0,0.0))
-        for (i in 0 until coordinates.size) {
-            points.add(LatLng(
-                coordinates[i].latitude(),
-                coordinates[i].longitude()
-            ))
-        }
-        // Draw Points on MapView
-        map!!.addPolyline(
-            PolylineOptions()
-                .addAll(points)
-                .color(Color.parseColor("#009688"))
-                .width(5f)
-        )
+
+    private fun changeActivity(location: LatLng) {
+        val i = Intent(this,MarkerResultActivity::class.java)
+        i.putExtra("markerLocation", location.toString())
+        startActivity(i)
     }
+
+    override fun onExplanationNeeded(permissionsToExplain: MutableList<String>?) {
+        Toast.makeText(this, "user_location_permission_explanation", Toast.LENGTH_LONG).show();
+    }
+
+    override fun onPermissionResult(granted: Boolean) {
+        if (granted) {
+            mapboxMap!!.getStyle { style -> enableLocationComponent(style) }
+        } else {
+            Toast.makeText(this, "user_location_permission_not_granted", Toast.LENGTH_LONG)
+                .show()
+            finish()
+        }
+    }
+
+    @SuppressWarnings( "MissingPermission")
+    private fun enableLocationComponent(loadedMapStyle: Style) {
+// Check if permissions are enabled and if not request
+        if (PermissionsManager.areLocationPermissionsGranted(this)) {
+
+// Enable the most basic pulsing styling by ONLY using
+// the `.pulseEnabled()` method
+            val customLocationComponentOptions =
+                LocationComponentOptions.builder(this)
+                    .pulseEnabled(true).bearingTintColor(Color.BLUE).backgroundTintColor(Color.BLUE)
+                    .build()
+
+// Get an instance of the component
+            val locationComponent = mapboxMap!!.locationComponent
+
+// Activate with options
+            locationComponent.activateLocationComponent(
+                LocationComponentActivationOptions.builder(this, loadedMapStyle)
+                    .locationComponentOptions(customLocationComponentOptions)
+                    .build()
+            )
+
+// Enable to make component visible
+            if (ActivityCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.ACCESS_FINE_LOCATION
+                ) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                // TODO: Consider calling
+                //    ActivityCompat#requestPermissions
+                // here to request the missing permissions, and then overriding
+                //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+                //                                          int[] grantResults)
+                // to handle the case where the user grants the permission. See the documentation
+                // for ActivityCompat#requestPermissions for more details.
+                return
+            }
+            locationComponent.isLocationComponentEnabled = true
+
+// Set the component's camera mode
+            locationComponent.cameraMode = CameraMode.TRACKING
+
+// Set the component's render mode
+            locationComponent.renderMode = RenderMode.COMPASS
+            //initLocationEngine()
+        } else {
+            permissionsManager = PermissionsManager(this)
+            permissionsManager!!.requestLocationPermissions(this)
+        }
+    }
+
+//    @SuppressLint("MissingPermission")
+//    private fun initLocationEngine() {
+//        locationEngine = LocationEngineProvider.getBestLocationEngine(this)
+//
+//        val request: LocationEngineRequest = Builder(DEFAULT_INTERVAL_IN_MILLISECONDS)
+//            .setPriority(LocationEngineRequest.PRIORITY_HIGH_ACCURACY)
+//            .setMaxWaitTime(DEFAULT_MAX_WAIT_TIME).build()
+//
+//        locationEngine.requestLocationUpdates(request, callback, mainLooper)
+//        locationEngine.getLastLocation(callback)
+//    }
+
+
     override fun onResume() {
         super.onResume()
         mapView!!.onResume()
     }
-
 
     override fun onStart() {
         super.onStart()
         mapView!!.onStart()
     }
 
-
     override fun onStop() {
         super.onStop()
         mapView!!.onStop()
     }
 
-
     override fun onPause() {
         super.onPause()
         mapView!!.onPause()
-    }
-
-
-    override fun onSaveInstanceState(outState: Bundle) {
-        super.onSaveInstanceState(outState)
-        mapView!!.onSaveInstanceState(outState)
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        // Cancel the directions API request
-        client?.cancelCall()
-        mapView!!.onDestroy()
     }
 
     override fun onLowMemory() {
@@ -192,20 +265,14 @@ class MapActivity : AppCompatActivity(), OnMapReadyCallback {
         mapView!!.onLowMemory()
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        mapView!!.onDestroy()
+    }
 
-    // 목적지 주소값을 통해 목적지 위도 경도를 얻어오는 구문
-    /*
-    fun getPointFromGeoCoder(addr: String) {
-        val geocoder = Geocoder(this)
-        var listAddress: List<Address>? = null
-        try {
-            listAddress = geocoder.getFromLocationName(addr, 1)
-        } catch (e: IOException) {
-            e.printStackTrace()
-        }
-        destinationX = listAddress!![0].getLongitude()
-        destinationY = listAddress!![0].getLatitude()
-        //println("$addr's Destination x, y = $destinationX, $destinationY")
-        Log.i("stringloc",listAddress.toString())
-    }*/
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState!!)
+        mapView!!.onSaveInstanceState(outState)
+    }
+
 }
