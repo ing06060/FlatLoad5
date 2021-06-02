@@ -17,7 +17,7 @@ import java.util.*
 
 class TestGetServerActivity : AppCompatActivity() {
 
-    val BASE_URL_FLAT_API = "http://15.164.166.74:8080"//"http://10.0.2.2:3000" //"http://15.164.166.74:8080"
+    val BASE_URL_FLAT_API = "http://10.0.2.2:3000"//"http://10.0.2.2:3000" //"http://15.164.166.74:8080"
     val gson = GsonBuilder().setLenient().create()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -51,9 +51,9 @@ class TestGetServerActivity : AppCompatActivity() {
                     val decodedBytes = Base64.decode(response.body()?.get(0)?.image, 0)
                     val bitmap = BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)
                     imageView.setImageBitmap(bitmap)
-                    textView5.text =response.body()?.get(0)?.location
+                    textView5.text =response.body()?.get(0)?.location.toString()
 
-                    textView7.text = response.body()?.get(1)?.location
+                    textView7.text = response.body()?.get(1)?.location.toString()
                     val decodedBytes2 = Base64.decode(response.body()?.get(1)?.image, 0)
                     val bitmap2 = BitmapFactory.decodeByteArray(decodedBytes2, 0, decodedBytes2.size)
                     imageView2.setImageBitmap(bitmap2)

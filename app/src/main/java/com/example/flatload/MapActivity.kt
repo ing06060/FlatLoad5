@@ -4,11 +4,14 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.location.Location
 import android.os.Bundle
 import android.util.Log
+import android.view.LayoutInflater
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
+import com.google.gson.GsonBuilder
 import com.mapbox.android.core.permissions.PermissionsListener
 import com.mapbox.android.core.permissions.PermissionsManager
 import com.mapbox.geojson.Feature
@@ -16,6 +19,8 @@ import com.mapbox.geojson.FeatureCollection
 import com.mapbox.geojson.LineString
 import com.mapbox.geojson.Point
 import com.mapbox.mapboxsdk.Mapbox
+import com.mapbox.mapboxsdk.camera.CameraPosition;
+import com.mapbox.mapboxsdk.camera.CameraUpdateFactory;
 import com.mapbox.mapboxsdk.geometry.LatLng
 import com.mapbox.mapboxsdk.location.LocationComponentActivationOptions
 import com.mapbox.mapboxsdk.location.LocationComponentOptions
@@ -35,19 +40,19 @@ import com.mapbox.mapboxsdk.style.layers.LineLayer
 import com.mapbox.mapboxsdk.style.layers.Property
 import com.mapbox.mapboxsdk.style.layers.PropertyFactory
 import com.mapbox.mapboxsdk.style.sources.GeoJsonSource
-import com.mapbox.mapboxsdk.utils.BitmapUtils
+import retrofit2.Call
+import retrofit2.Callback
+import retrofit2.Response
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
 
-class MapActivity : AppCompatActivity(),PermissionsListener,OnMapReadyCallback {
+class MapActivity : AppCompatActivity(),PermissionsListener,OnMapReadyCallback,MapboxMap.OnMapClickListener {
 
     private var mapView: MapView? = null
     private lateinit var routeCoordinates: ArrayList<Point>
     private var permissionsManager: PermissionsManager? = null
     private var mapboxMap: MapboxMap? = null
     private lateinit var LocList: PairList
-
-    private val SOURCE_ID = "SOURCE_ID"
-    private val ICON_ID = "ICON_ID"
-    private val LAYER_ID = "LAYER_ID"
 
     private val MAKI_ICON_CAFE = "cafe-15"
     private val MAKI_ICON_HARBOR = "harbor-15"
@@ -58,19 +63,76 @@ class MapActivity : AppCompatActivity(),PermissionsListener,OnMapReadyCallback {
 
     private var localizationPlugin: LocalizationPlugin? = null
 
+    val BASE_URL_FLAT_API = "http://10.0.2.2:3000" //"http://15.164.166.74:8080"(민영) //"http://10.0.2.2:3000"(에뮬레이터-로컬서버 통신)
+    val gson = GsonBuilder().setLenient().create()
+    val retrofit = Retrofit.Builder()
+        .baseUrl(BASE_URL_FLAT_API)
+        .addConverterFactory(GsonConverterFactory.create(gson)).build()
+    //.addConverterFactory(ScalarsConverterFactory.create())
+    //.build()
+    val api = retrofit.create(FlatAPI::class.java)
+
+    private lateinit var resultList: List<ResultGet>
+    private lateinit var startPoint: LatLng
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Mapbox.getInstance(this, getString(R.string.access_token))
 
         setContentView(R.layout.activity_map)
+
         val i = intent
         LocList = i.getSerializableExtra("pairList") as PairList
+        Log.i("pairList확인", LocList.pairList.toString())
 
-        Log.i("pairList", LocList.toString())
-        initRouteCoordinates(LocList)
+        startPoint = LatLng(LocList.pairList[0].second, LocList.pairList[0].first)
+        Log.i("startPoint확인", startPoint.toString())
+
+        sendToServer(LocList.pairList) // 서버로 길찾기 좌표 전송 -> 결과 resultList에 저장
         mapView = findViewById(R.id.mapView)
         mapView?.onCreate(savedInstanceState)
-        mapView?.getMapAsync(this)
+//        val currentCameraPosition = mapboxMap?.cameraPosition
+//        val currentZoom = currentCameraPosition?.zoom
+//        val currentTilt = currentCameraPosition?.tilt
+    }
+
+    private fun sendToServer(pairList: List<Pair<Double, Double>>) {
+        var LocList = mutableListOf<Location>()
+        Log.d("pairList 확인:",pairList.toString() )
+        val callPostJson = api.postJson(pairList)
+
+        callPostJson.enqueue(object : Callback<List<ResultGet>> {
+            override fun onFailure(call: Call<List<ResultGet>>, t: Throwable) {
+                Log.d("결과:", "실패 : $t")
+                resultMsgFromServer("실패 : $t")
+            }
+            override fun onResponse(
+                call: Call<List<ResultGet>>,
+                response: Response<List<ResultGet>>
+            ) {
+                //val byte = response?.body()?.byteInputStream()
+                //val bitmap = BitmapFactory.decodeStream(byte)
+                Log.d("결과", "성공 : ${response.raw()}")
+                //textviewJSONText.append(response.body().toString())
+                Log.d("출력", "성공 :" + response?.body().toString())
+                //resultMsgFromServer(response?.body().toString())
+                resultMsgFromServer(response?.body().toString())
+                saveResultGet(response?.body())
+                //response?.body()?.let { goToMap(2) }
+            }
+        })
+    }
+    private fun saveResultGet(body: List<ResultGet>?) {
+        if (body != null) {
+            resultList = body
+            Log.i("resultList 확인:",resultList.toString())
+            initRouteCoordinates(LocList)
+            mapView?.getMapAsync(this) //onMapReadyCallback 시작
+        }
+   }
+
+    private fun resultMsgFromServer(toString: String) {
+        Toast.makeText(this,toString, Toast.LENGTH_LONG).show()
     }
 
     private fun initRouteCoordinates(locList: PairList) {
@@ -79,14 +141,13 @@ class MapActivity : AppCompatActivity(),PermissionsListener,OnMapReadyCallback {
         Log.i("확인", locList.pairList.size.toString())
         Log.i("확인", locList.pairList[0].first.toString())
         Log.i("확인", locList.pairList[0].second.toString())
-
         routeCoordinates = ArrayList<Point>()
+
         for (i in 0..locList.pairList.size-1){
             routeCoordinates.add(Point.fromLngLat(locList.pairList[i].first,locList.pairList[i].second))
-            Log.i("LocList 확인:", routeCoordinates.get(i).toString())
+            //Log.i("LocList 확인:", routeCoordinates.get(i).toString())
         }
-
-        Log.i("LocList 확인:",routeCoordinates.toString())
+        //Log.i("LocList 확인:",routeCoordinates.toString())
 //        // Create a list to store our line coordinates.
 //        routeCoordinates = ArrayList<Point>()
 //        routeCoordinates?.add(Point.fromLngLat(127.074475, 37.547962))
@@ -94,53 +155,82 @@ class MapActivity : AppCompatActivity(),PermissionsListener,OnMapReadyCallback {
 
     override fun onMapReady(mapboxMap: MapboxMap) {
         this.mapboxMap = mapboxMap
+        val resultGetList = this.resultList
+        val loclist = this.LocList.pairList
+
+        Log.i("onMapReady 안에서 resultGetList 확인:",resultGetList.toString())
 
         mapboxMap?.setStyle(Style.MAPBOX_STREETS, object: Style.OnStyleLoaded {
             override fun onStyleLoaded(style: Style) {
+                /* ================== 카메라 target ======================== */
+                // 카메라 zoom 설정 -> 적용 안됨
+//                val position = CameraPosition.Builder()
+//                    .target(LatLng(loclist.pairList[0].second, loclist.pairList[0].first))
+//                    .zoom(22.0)
+//                    .tilt(60.00)
+//                    .build()
+//                mapboxMap?.animateCamera(CameraUpdateFactory.newCameraPosition(position), 7000)
+
                 // 언어 설정
                 localizationPlugin = LocalizationPlugin(mapView!!, mapboxMap, style)
                 localizationPlugin!!.setMapLanguage(MapLocale.KOREA)
 
                 // 마커 추가
                 symbolManager = SymbolManager(mapView!!, mapboxMap, style)
-
                 symbolManager!!.iconAllowOverlap = true
                 symbolManager!!.textAllowOverlap = true
-                // Add symbol at specified lat/lon
 
-                symbol = symbolManager!!.create(
-                    SymbolOptions()
-                        .withLatLng(LatLng(37.547147, 127.074148)) //위험 요소 마커 추가
-                        .withIconImage(MAKI_ICON_HARBOR)
-                        .withIconSize(2.0f)
-                        .withDraggable(true)
-                )
-                symbolManager!!.addClickListener(object : OnSymbolClickListener {
-                    override fun onAnnotationClick(symbol: Symbol): Boolean {
-                        Toast.makeText(
-                            this@MapActivity,
-                            "click marker symbol", Toast.LENGTH_SHORT
-                        ).show()
-                        //symbol.iconImage = MAKI_ICON_CAFE
-                        //symbolManager!!.update(symbol)
-//                        val i = Intent(this,MapActivity::class.java)
-//                        startActivity(i)
-                        changeActivity(symbol.latLng)
-                        return true
+                if(resultGetList.size > 1){
+                    for(i in 0..resultGetList.size-1){
+                        symbol = symbolManager!!.create(
+                            SymbolOptions()
+                                .withLatLng(LatLng(resultGetList[i].location[1],resultGetList[i].location[0]))
+                                //.withLatLng(LatLng(37.547147, 127.074148)) //위험 요소 마커 추가
+                                .withIconImage(MAKI_ICON_HARBOR)
+                                .withIconSize(2.0f)
+                        )
                     }
-                })
-                enableLocationComponent(style)
-                // Create the LineString from the list of coordinates and then make a GeoJSON
-                // FeatureCollection so we can add the line to our map as a layer.
-                style.addSource(
-                    GeoJsonSource("line-source",
-                        FeatureCollection.fromFeatures(arrayOf(
+                } else if(resultGetList.size == 1) {
+                    symbol = symbolManager!!.create(
+                        SymbolOptions()
+                            .withLatLng(LatLng(resultGetList[0].location[1],resultGetList[0].location[0]))
+                            //.withLatLng(LatLng(37.547147, 127.074148)) //위험 요소 마커 추가
+                            .withIconImage(MAKI_ICON_HARBOR)
+                            .withIconSize(2.0f)
+                    )
+            }
+            symbolManager!!.addClickListener(object : OnSymbolClickListener {
+                override fun onAnnotationClick(symbol: Symbol): Boolean {
+                    Toast.makeText(
+                        this@MapActivity,
+                        "click marker symbol", Toast.LENGTH_SHORT
+                    ).show()
+                    //클릭된 심볼이 ressultGetList에 있으면 좌표,이미지 인텐트로 넘기기기 - 함수로
+                    val results = checkClickedSymbol(symbol.latLng)
+//                        for(i in 0..resultGetList.size-1){
+//                            Toast.makeText(
+//                                this@MapActivity,
+//                                i.toString()+"번째 데이터와 동일", Toast.LENGTH_SHORT
+//                            ).show()
+//                            if( LatLng(resultGetList[i].location[1],resultGetList[i].location[0] )==symbol.latLng){
+//                                changeActivity(symbol.latLng,resultGetList[i].image)
+//                            }
+//                        }
+                    //symbol.iconImage = MAKI_ICON_CAFE
+                    //symbolManager!!.update(symbol)
+                    //changeActivity(symbol.latLng,resultGetList[0].image)
+                    return true
+                }
+            })
+            enableLocationComponent(style)
+            // 길찾기 polyline 추가
+            style.addSource(
+            GeoJsonSource("line-source",
+            FeatureCollection.fromFeatures(arrayOf(
                             Feature.fromGeometry(
                                 LineString.fromLngLats(routeCoordinates!!)
                             ))))
                 )
-                // The layer properties for our line. This is where we make the line dotted, set the
-                // color, etc.
                 style.addLayer(
                     LineLayer("linelayer", "line-source").withProperties(
                         PropertyFactory.lineDasharray(arrayOf(0.01f, 2f)),
@@ -149,13 +239,44 @@ class MapActivity : AppCompatActivity(),PermissionsListener,OnMapReadyCallback {
                         PropertyFactory.lineWidth(5f),
                         PropertyFactory.lineColor(Color.parseColor("#e55e5e"))
                     ))
+                mapboxMap.addOnMapClickListener(this@MapActivity)
             }
         })
     }
 
-    private fun changeActivity(location: LatLng) {
+    private fun checkClickedSymbol(latLng: LatLng): Int{
+        for(i in 0..resultList.size-1){
+            Toast.makeText(
+                this@MapActivity,
+                i.toString()+"번째 데이터와 동일", Toast.LENGTH_SHORT
+            ).show()
+            if( LatLng(resultList[i].location[1],resultList[i].location[0] )==latLng){
+                symbolManager!!.addClickListener(object : OnSymbolClickListener {
+                    override fun onAnnotationClick(symbol: Symbol): Boolean {
+                        changeActivity(symbol.latLng,resultList[i].image)
+                        return true
+                    }
+                })
+            }
+        }
+        return 1
+    }
+
+    /* ================== 카메라 target ======================== */
+    override fun onMapClick(point: LatLng): Boolean { // 현재는 지도 클릭하면 출발지로 animateCamera되게 해놓음
+        val position = CameraPosition.Builder()
+                    .target(startPoint) //출발지로 바꾸기
+                    .zoom(22.0)
+                    //.tilt(60.00)
+                    .build()
+        mapboxMap?.animateCamera(CameraUpdateFactory.newCameraPosition(position), 7000)
+        return true
+    }
+
+    private fun changeActivity(location: LatLng,imgstr:String) {
         val i = Intent(this,MarkerResultActivity::class.java)
         i.putExtra("markerLocation", location.toString())
+        i.putExtra("imageString",imgstr)
         startActivity(i)
     }
 
@@ -175,20 +296,16 @@ class MapActivity : AppCompatActivity(),PermissionsListener,OnMapReadyCallback {
 
     @SuppressWarnings( "MissingPermission")
     private fun enableLocationComponent(loadedMapStyle: Style) {
-// Check if permissions are enabled and if not request
         if (PermissionsManager.areLocationPermissionsGranted(this)) {
-
-// Enable the most basic pulsing styling by ONLY using
-// the `.pulseEnabled()` method
             val customLocationComponentOptions =
                 LocationComponentOptions.builder(this)
                     .pulseEnabled(true).bearingTintColor(Color.BLUE).backgroundTintColor(Color.BLUE)
                     .build()
 
-// Get an instance of the component
+        // Get an instance of the component
             val locationComponent = mapboxMap!!.locationComponent
 
-// Activate with options
+        // Activate with options
             locationComponent.activateLocationComponent(
                 LocationComponentActivationOptions.builder(this, loadedMapStyle)
                     .locationComponentOptions(customLocationComponentOptions)
@@ -275,4 +392,6 @@ class MapActivity : AppCompatActivity(),PermissionsListener,OnMapReadyCallback {
         mapView!!.onSaveInstanceState(outState)
     }
 
+
 }
+

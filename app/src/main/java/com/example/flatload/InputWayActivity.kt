@@ -42,15 +42,9 @@ class InputWayActivity : AppCompatActivity() { //출발지 도착지 입력 화�
     var locationCallback: LocationCallback?=null
     var locationRequest: LocationRequest?=null
     var pairList = mutableListOf<Pair<Double,Double>>()
-    val BASE_URL_FLAT_API = "http://10.0.2.2:3000" //"http://15.164.166.74:8080"//"http://10.0.2.2:3000" /* 에뮬레이터 - 로컬서버 통신 */
-    val gson = GsonBuilder().setLenient().create()
-    val retrofit = Retrofit.Builder()
-        .baseUrl(BASE_URL_FLAT_API)
-        .addConverterFactory(GsonConverterFactory.create(gson)).build()
-    //.addConverterFactory(ScalarsConverterFactory.create())
-    //.build()
-    val api = retrofit.create(FlatAPI::class.java)
+
     lateinit var PointList:ArrayList<Point>
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -59,11 +53,9 @@ class InputWayActivity : AppCompatActivity() { //출발지 도착지 입력 화�
     }
 
     private fun init() {
-        PointList = ArrayList<Point>()
         //처음에 gps 허용
         //내위치 누르면 현재 위치로 설정
-        //확인 버튼 누르면 출발지, 도착지 -> 위도 경도로 변경 -> json 객체 만들기 -> MapActivity
-
+        //확인 버튼 누르면 출발지, 도착지 -> 위도 경도로 변경
         val mgeocorder: Geocoder = Geocoder(this, Locale.getDefault())
         initLocation() //gps 설정
 
@@ -75,11 +67,15 @@ class InputWayActivity : AppCompatActivity() { //출발지 도착지 입력 화�
             Log.i("my location", txtLoc.toString())
         }
         button.setOnClickListener { //확인 버튼
-            //출발지 도착지 텍스트 위도 경도 변경 -> json 객체 만들기 -> 서버에 전달
+            PointList = ArrayList<Point>()
+            pairList.clear()
+            PointList.clear()
+
             val start = editTextStart.text.toString()
             val end = editTextEnd.text.toString()
+
             if(start.isNotEmpty() && end.isNotEmpty()) {
-                Geocoding(start)
+                val result =Geocoding(start)
                 Geocoding(end)
                 //Log.d("포인트리스트 확인",PointList.toString())
             }else{
@@ -88,13 +84,21 @@ class InputWayActivity : AppCompatActivity() { //출발지 도착지 입력 화�
                 editTextEnd.text.clear()
             }
         }
+        button2.setOnClickListener { // 취소 버튼
+            //startPoint endPoint pairList PointList 초기화
+            PointList.clear()
+            pairList.clear()
+            editTextStart.text.clear()
+            editTextEnd.text.clear()
+            textviewJSONText.setText(" ")
+        }
     }
 
     private fun savePointToList(point: Point){
         PointList.add(point)
     }
 
-    private fun Geocoding(strlocation: String){
+    private fun Geocoding(strlocation: String):Int {
         val mapboxGeocoding = MapboxGeocoding.builder()
             .accessToken(getString(R.string.access_token))
             .query(strlocation)
@@ -105,6 +109,7 @@ class InputWayActivity : AppCompatActivity() { //출발지 도착지 입력 화�
                 if (results.size > 0) {
                     val firstResultPoint = results[0].center()
                     Log.d("geocoding확인", "onResponse: " + firstResultPoint!!.toString())
+                    //results[0].center()?.let { saveStartPoint(it) }
                     results[0].center()?.let { savePointToList(it) }
                     Log.d("포인트리스트 확인 in enqueue",PointList.toString())
                     if(PointList.size == 2){
@@ -118,6 +123,7 @@ class InputWayActivity : AppCompatActivity() { //출발지 도착지 입력 화�
                 throwable.printStackTrace()
             }
         })
+        return 1
     }
 
     private fun ReverseGeocoding(longitude: Double, latitude: Double) {
@@ -164,11 +170,12 @@ class InputWayActivity : AppCompatActivity() { //출발지 도착지 입력 화�
         //val response = client.executeCall().body()
         //Log.i("response", response.toString())
 
+        pairList.clear()
+
         //길찾기 응답
         client?.enqueueCall(object : Callback<DirectionsResponse> {
             @SuppressLint("LogNotTimber")
             override fun onResponse(call: Call<DirectionsResponse>, response: Response<DirectionsResponse>) {
-
                 if (response.body() == null) {
                     Log.i("error", "No routes found, make sure you set the right user and access token.")
                     return
@@ -176,10 +183,8 @@ class InputWayActivity : AppCompatActivity() { //출발지 도착지 입력 화�
                     Log.i("error", "No routes found")
                     return
                 }
-
                 // Get the directions route
                 val currentRoute = response.body()!!.routes()[0]
-
                 //textviewJSONText?.setText(response.body()!!.toJson())
                 val jsonString = response.body()!!.toJson().trimIndent()//json 형식으로 바꿔서 string에 저장
                 val jsonObject = JSONObject(jsonString)
@@ -219,13 +224,17 @@ class InputWayActivity : AppCompatActivity() { //출발지 도착지 입력 화�
                 }
                 Log.i("이동거리,소요시간 출력", distance_km.toString() +"km, "+duration_min.toString()+"분")
                 var a: String = ""
-                for(i in 0..pairList.size-1){
-                    a = a + pairList.get(i).toString() + "\n"
-                }
-                textviewJSONText?.setText(a) //textview로 띄움
+//                for(i in 0..pairList.size-1){
+//                    a = a + pairList.get(i).toString() + "\n"
+//                }
+                textviewJSONText?.setText(pairList.toString()) //textview로 띄움
                 flag=1
-                sendToServer(pairList)
-                goToMap(pairList,distance_km)
+                val result = checkDistance(distance_km)
+                if(result == 1){
+                    //sendToServer(pairList)
+                    goToMap(pairList)
+                }
+                //goToMap(pairList)
             }
             override fun onFailure(call: Call<DirectionsResponse>, throwable: Throwable) {
                 Log.i("error", "Error: " + throwable.message)
@@ -234,48 +243,27 @@ class InputWayActivity : AppCompatActivity() { //출발지 도착지 입력 화�
         )
     }
 
-    private fun goToMap(pairList: List<Pair<Double, Double>>, distanceKm: Float){
+    private fun checkDistance(distanceKm: Float): Int {
         if(distanceKm >= 3.00){
             Toast.makeText(this,"해당 서비스는 3km 이내의 도보 길찾기 경로만 제공 합니다.", Toast.LENGTH_LONG).show()
             textviewJSONText.setText(" ")
             editTextStart.text.clear()
             editTextEnd.text.clear()
-            return
+            return 0
         }
+        else{
+            return 1
+        }
+    }
+
+    private fun goToMap(pairList: List<Pair<Double, Double>>){
         if(pairList.isNotEmpty()) {
             val i = Intent(this, MapActivity::class.java)
             i.putExtra("pairList", PairList(pairList))
+            //i.putExtra("resultGet",ResultGetList(resultGet))
+            //i.putExtra("startPoint",startPoint.toString())
             startActivity(i)
         }
-    }
-
-    private fun sendToServer(pairList: List<Pair<Double, Double>>) {
-        var LocList = mutableListOf<Location>()
-        Log.d("pairList 확인:",pairList.toString() )
-        val callPostJson = api.postJson(pairList)
-
-        callPostJson.enqueue(object : Callback<List<ResultGet>> {
-            override fun onFailure(call: Call<List<ResultGet>>, t: Throwable) {
-                Log.d("결과:", "실패 : $t")
-                resultMsgFromServer("실패 : $t")
-            }
-            override fun onResponse(
-                call: Call<List<ResultGet>>,
-                response: Response<List<ResultGet>>
-            ) {
-                //val byte = response?.body()?.byteInputStream()
-                //val bitmap = BitmapFactory.decodeStream(byte)/
-                Log.d("결과", "성공 : ${response.raw()}")
-                //textviewJSONText.append(response.body().toString())
-                Log.d("출력", "성공 :" + response?.body().toString())
-                //resultMsgFromServer(response?.body().toString())
-                resultMsgFromServer(response?.body().toString())
-            }
-        })
-    }
-
-    private fun resultMsgFromServer(toString: String) {
-        Toast.makeText(this,toString, Toast.LENGTH_LONG).show()
     }
 
     private fun startLocationUpdates() { //gps 관련
@@ -292,7 +280,6 @@ class InputWayActivity : AppCompatActivity() { //출발지 도착지 입력 화�
                     loc= LatLng(location.latitude,location.longitude)
                     Log.i("changeLocation",loc.toString())
                 }
-                // googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(loc,16.0f))
             }
         }
 
