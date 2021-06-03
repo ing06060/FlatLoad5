@@ -1,6 +1,7 @@
 package com.example.flatload
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
@@ -119,6 +120,7 @@ class MapActivity : AppCompatActivity(),PermissionsListener,OnMapReadyCallback,M
                 resultMsgFromServer(response?.body().toString())
                 saveResultGet(response?.body())
                 //response?.body()?.let { goToMap(2) }
+
             }
         })
     }
@@ -128,8 +130,48 @@ class MapActivity : AppCompatActivity(),PermissionsListener,OnMapReadyCallback,M
             Log.i("resultList 확인:",resultList.toString())
             initRouteCoordinates(LocList)
             mapView?.getMapAsync(this) //onMapReadyCallback 시작
+
+
         }
    }
+
+    private fun addSymbolListener(resultList: List<ResultGet>) {
+            symbolManager!!.addClickListener(object : OnSymbolClickListener {
+                override fun onAnnotationClick(symbol: Symbol): Boolean {
+                    Toast.makeText(
+                        this@MapActivity,
+                        "click marker symbol", Toast.LENGTH_SHORT
+                    ).show()
+                    //클릭된 심볼이 ressultGetList에 있으면 좌표,이미지 인텐트로 넘기기기 - 함수로
+                    val results = checkClickedSymbol(symbol.latLng)
+//                        for(i in 0..resultGetList.size-1){
+//                            Toast.makeText(
+//                                this@MapActivity,
+//                                i.toString()+"번째 데이터와 동일", Toast.LENGTH_SHORT
+//                            ).show()
+//                            if( LatLng(resultGetList[i].location[1],resultGetList[i].location[0] )==symbol.latLng){
+//                                changeActivity(symbol.latLng,resultGetList[i].image)
+//                            }
+//                        }
+                    //symbol.iconImage = MAKI_ICON_CAFE
+                    //symbolManager!!.update(symbol)
+                    //changeActivity(symbol.latLng,resultGetList[0].image)
+                    return true
+                }
+            })
+    }
+    private fun checkClickedSymbol(latLng: LatLng): Int{
+        for(i in 0..resultList.size-1){
+            Toast.makeText(
+                this@MapActivity,
+                i.toString()+"번째 데이터와 동일", Toast.LENGTH_SHORT
+            ).show()
+            if( LatLng( resultList[i].location[1],resultList[i].location[0] ) == latLng){
+                changeActivity(latLng,resultList[i].image)
+            }
+        }
+        return 1
+    }
 
     private fun resultMsgFromServer(toString: String) {
         Toast.makeText(this,toString, Toast.LENGTH_LONG).show()
@@ -148,17 +190,29 @@ class MapActivity : AppCompatActivity(),PermissionsListener,OnMapReadyCallback,M
             //Log.i("LocList 확인:", routeCoordinates.get(i).toString())
         }
         //Log.i("LocList 확인:",routeCoordinates.toString())
+
 //        // Create a list to store our line coordinates.
 //        routeCoordinates = ArrayList<Point>()
 //        routeCoordinates?.add(Point.fromLngLat(127.074475, 37.547962))
     }
 
+    @SuppressLint("LogNotTimber")
     override fun onMapReady(mapboxMap: MapboxMap) {
         this.mapboxMap = mapboxMap
         val resultGetList = this.resultList
         val loclist = this.LocList.pairList
 
         Log.i("onMapReady 안에서 resultGetList 확인:",resultGetList.toString())
+        Log.i("onMapReady 안에서 startPoint 확인:",startPoint.toString())
+
+        /* ==================== 카메라 target ===============*/
+        val position = CameraPosition.Builder()
+            .target(startPoint) //출발지로 바꾸기
+            .zoom(22.0)
+            //.tilt(60.00)
+            .build()
+
+        mapboxMap.cameraPosition = position
 
         mapboxMap?.setStyle(Style.MAPBOX_STREETS, object: Style.OnStyleLoaded {
             override fun onStyleLoaded(style: Style) {
@@ -190,6 +244,7 @@ class MapActivity : AppCompatActivity(),PermissionsListener,OnMapReadyCallback,M
                                 .withIconSize(2.0f)
                         )
                     }
+
                 } else if(resultGetList.size == 1) {
                     symbol = symbolManager!!.create(
                         SymbolOptions()
@@ -199,29 +254,34 @@ class MapActivity : AppCompatActivity(),PermissionsListener,OnMapReadyCallback,M
                             .withIconSize(2.0f)
                     )
             }
-            symbolManager!!.addClickListener(object : OnSymbolClickListener {
-                override fun onAnnotationClick(symbol: Symbol): Boolean {
-                    Toast.makeText(
-                        this@MapActivity,
-                        "click marker symbol", Toast.LENGTH_SHORT
-                    ).show()
-                    //클릭된 심볼이 ressultGetList에 있으면 좌표,이미지 인텐트로 넘기기기 - 함수로
-                    val results = checkClickedSymbol(symbol.latLng)
-//                        for(i in 0..resultGetList.size-1){
-//                            Toast.makeText(
-//                                this@MapActivity,
-//                                i.toString()+"번째 데이터와 동일", Toast.LENGTH_SHORT
-//                            ).show()
-//                            if( LatLng(resultGetList[i].location[1],resultGetList[i].location[0] )==symbol.latLng){
-//                                changeActivity(symbol.latLng,resultGetList[i].image)
-//                            }
-//                        }
-                    //symbol.iconImage = MAKI_ICON_CAFE
-                    //symbolManager!!.update(symbol)
-                    //changeActivity(symbol.latLng,resultGetList[0].image)
-                    return true
-                }
-            })
+
+            // symbolManager.addclicklistener 추가
+            addSymbolListener(resultList)
+
+//            symbolManager!!.addClickListener(object : OnSymbolClickListener {
+//                override fun onAnnotationClick(symbol: Symbol): Boolean {
+//                    Toast.makeText(
+//                        this@MapActivity,
+//                        "click marker symbol", Toast.LENGTH_SHORT
+//                    ).show()
+//                    //클릭된 심볼이 ressultGetList에 있으면 좌표,이미지 인텐트로 넘기기기 - 함수로
+//                    val results = checkClickedSymbol(symbol.latLng)
+////                        for(i in 0..resultGetList.size-1){
+////                            Toast.makeText(
+////                                this@MapActivity,
+////                                i.toString()+"번째 데이터와 동일", Toast.LENGTH_SHORT
+////                            ).show()
+////                            if( LatLng(resultGetList[i].location[1],resultGetList[i].location[0] )==symbol.latLng){
+////                                changeActivity(symbol.latLng,resultGetList[i].image)
+////                            }
+////                        }
+//                    //symbol.iconImage = MAKI_ICON_CAFE
+//                    //symbolManager!!.update(symbol)
+//                    //changeActivity(symbol.latLng,resultGetList[0].image)
+//                    return true
+//                }
+//            })
+
             enableLocationComponent(style)
             // 길찾기 polyline 추가
             style.addSource(
@@ -244,23 +304,6 @@ class MapActivity : AppCompatActivity(),PermissionsListener,OnMapReadyCallback,M
         })
     }
 
-    private fun checkClickedSymbol(latLng: LatLng): Int{
-        for(i in 0..resultList.size-1){
-            Toast.makeText(
-                this@MapActivity,
-                i.toString()+"번째 데이터와 동일", Toast.LENGTH_SHORT
-            ).show()
-            if( LatLng(resultList[i].location[1],resultList[i].location[0] )==latLng){
-                symbolManager!!.addClickListener(object : OnSymbolClickListener {
-                    override fun onAnnotationClick(symbol: Symbol): Boolean {
-                        changeActivity(symbol.latLng,resultList[i].image)
-                        return true
-                    }
-                })
-            }
-        }
-        return 1
-    }
 
     /* ================== 카메라 target ======================== */
     override fun onMapClick(point: LatLng): Boolean { // 현재는 지도 클릭하면 출발지로 animateCamera되게 해놓음
@@ -273,7 +316,7 @@ class MapActivity : AppCompatActivity(),PermissionsListener,OnMapReadyCallback,M
         return true
     }
 
-    private fun changeActivity(location: LatLng,imgstr:String) {
+    private fun changeActivity(location: LatLng, imgstr:String) {
         val i = Intent(this,MarkerResultActivity::class.java)
         i.putExtra("markerLocation", location.toString())
         i.putExtra("imageString",imgstr)
