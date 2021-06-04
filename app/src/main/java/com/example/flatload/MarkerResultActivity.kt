@@ -17,9 +17,13 @@ class MarkerResultActivity : AppCompatActivity() {
         val markerLoc = i.getStringExtra("markerLocation")
         textView6.text = markerLoc
 
-        val imagestr = i.getStringExtra("imageString")
-        val decodedBytes = Base64.decode(imagestr, 0)
+        val decodedBytes = i.getByteArrayExtra("image")
         val bitmap = BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)
         imageView3.setImageBitmap(bitmap)
+
+//        val imagestr = i.getStringExtra("imageString")
+//        val decodedBytes = Base64.decode(imagestr, 0)
+//        val bitmap = BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)
+        //imageView3.setImageBitmap(bitmap)
     }
 }

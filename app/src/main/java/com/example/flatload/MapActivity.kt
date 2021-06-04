@@ -7,6 +7,8 @@ import android.content.pm.PackageManager
 import android.graphics.Color
 import android.location.Location
 import android.os.Bundle
+import android.graphics.BitmapFactory
+import android.util.Base64
 import android.util.Log
 import android.view.LayoutInflater
 import android.widget.Toast
@@ -59,6 +61,7 @@ class MapActivity : AppCompatActivity(),PermissionsListener,OnMapReadyCallback,M
     private val MAKI_ICON_HARBOR = "harbor-15"
     private val MAKI_ICON_AIRPORT = "airport-15"
     private val MAKI_ICON_BARRIER = "barrier-15"
+
     private var symbolManager: SymbolManager? = null
     private var symbol: Symbol? = null
 
@@ -73,9 +76,11 @@ class MapActivity : AppCompatActivity(),PermissionsListener,OnMapReadyCallback,M
     //.build()
     val api = retrofit.create(FlatAPI::class.java)
 
-    private lateinit var resultList: List<ResultGet>
-    private lateinit var startPoint: LatLng
+    private lateinit var resultList: List<ResultGet> // 서버에서 받은 리스트
+    private lateinit var startPoint: LatLng //출발지
+    private lateinit var endPoint: LatLng //도착지
 
+    @SuppressLint("LogNotTimber")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Mapbox.getInstance(this, getString(R.string.access_token))
@@ -86,8 +91,15 @@ class MapActivity : AppCompatActivity(),PermissionsListener,OnMapReadyCallback,M
         LocList = i.getSerializableExtra("pairList") as PairList
         Log.i("pairList확인", LocList.pairList.toString())
 
-        startPoint = LatLng(LocList.pairList[0].second, LocList.pairList[0].first)
+        val start = i.getSerializableExtra("start") as PointIntent
+        startPoint = LatLng(start.point.latitude(),start.point.longitude())
         Log.i("startPoint확인", startPoint.toString())
+
+        val end = i.getSerializableExtra("end") as PointIntent
+        endPoint= LatLng(end.point.latitude(),end.point.longitude())
+
+//        startPoint = LatLng(LocList.pairList[0].second, LocList.pairList[0].first)
+//        Log.i("startPoint확인", startPoint.toString())
 
         sendToServer(LocList.pairList) // 서버로 길찾기 좌표 전송 -> 결과 resultList에 저장
         mapView = findViewById(R.id.mapView)
@@ -96,7 +108,7 @@ class MapActivity : AppCompatActivity(),PermissionsListener,OnMapReadyCallback,M
 //        val currentZoom = currentCameraPosition?.zoom
 //        val currentTilt = currentCameraPosition?.tilt
     }
-
+    // 서버로 좌표 전송
     private fun sendToServer(pairList: List<Pair<Double, Double>>) {
         var LocList = mutableListOf<Location>()
         Log.d("pairList 확인:",pairList.toString() )
@@ -105,22 +117,18 @@ class MapActivity : AppCompatActivity(),PermissionsListener,OnMapReadyCallback,M
         callPostJson.enqueue(object : Callback<List<ResultGet>> {
             override fun onFailure(call: Call<List<ResultGet>>, t: Throwable) {
                 Log.d("결과:", "실패 : $t")
-                resultMsgFromServer("실패 : $t")
+                makeToast("실패 : $t")
             }
             override fun onResponse(
                 call: Call<List<ResultGet>>,
                 response: Response<List<ResultGet>>
             ) {
-                //val byte = response?.body()?.byteInputStream()
-                //val bitmap = BitmapFactory.decodeStream(byte)
+
                 Log.d("결과", "성공 : ${response.raw()}")
-                //textviewJSONText.append(response.body().toString())
                 Log.d("출력", "성공 :" + response?.body().toString())
                 //resultMsgFromServer(response?.body().toString())
-                resultMsgFromServer(response?.body().toString())
+                makeToast(response?.body().toString())
                 saveResultGet(response?.body())
-                //response?.body()?.let { goToMap(2) }
-
             }
         })
     }
@@ -130,50 +138,25 @@ class MapActivity : AppCompatActivity(),PermissionsListener,OnMapReadyCallback,M
             Log.i("resultList 확인:",resultList.toString())
             initRouteCoordinates(LocList)
             mapView?.getMapAsync(this) //onMapReadyCallback 시작
-
-
         }
    }
 
-    private fun addSymbolListener(resultList: List<ResultGet>) {
-            symbolManager!!.addClickListener(object : OnSymbolClickListener {
-                override fun onAnnotationClick(symbol: Symbol): Boolean {
-                    Toast.makeText(
-                        this@MapActivity,
-                        "click marker symbol", Toast.LENGTH_SHORT
-                    ).show()
-                    //클릭된 심볼이 ressultGetList에 있으면 좌표,이미지 인텐트로 넘기기기 - 함수로
-                    val results = checkClickedSymbol(symbol.latLng)
-//                        for(i in 0..resultGetList.size-1){
-//                            Toast.makeText(
-//                                this@MapActivity,
-//                                i.toString()+"번째 데이터와 동일", Toast.LENGTH_SHORT
-//                            ).show()
-//                            if( LatLng(resultGetList[i].location[1],resultGetList[i].location[0] )==symbol.latLng){
-//                                changeActivity(symbol.latLng,resultGetList[i].image)
-//                            }
-//                        }
-                    //symbol.iconImage = MAKI_ICON_CAFE
-                    //symbolManager!!.update(symbol)
-                    //changeActivity(symbol.latLng,resultGetList[0].image)
-                    return true
-                }
-            })
-    }
+
     private fun checkClickedSymbol(latLng: LatLng): Int{
         for(i in 0..resultList.size-1){
-            Toast.makeText(
-                this@MapActivity,
-                i.toString()+"번째 데이터와 동일", Toast.LENGTH_SHORT
-            ).show()
+
             if( LatLng( resultList[i].location[1],resultList[i].location[0] ) == latLng){
+                Toast.makeText(
+                    this@MapActivity,
+                    i.toString()+"번째 데이터와 동일", Toast.LENGTH_SHORT
+                ).show()
                 changeActivity(latLng,resultList[i].image)
             }
         }
         return 1
     }
 
-    private fun resultMsgFromServer(toString: String) {
+    private fun makeToast(toString: String) {
         Toast.makeText(this,toString, Toast.LENGTH_LONG).show()
     }
 
@@ -205,83 +188,76 @@ class MapActivity : AppCompatActivity(),PermissionsListener,OnMapReadyCallback,M
         Log.i("onMapReady 안에서 resultGetList 확인:",resultGetList.toString())
         Log.i("onMapReady 안에서 startPoint 확인:",startPoint.toString())
 
-        /* ==================== 카메라 target ===============*/
+        /* ==================== 카메라 target =============== */
         val position = CameraPosition.Builder()
             .target(startPoint) //출발지로 바꾸기
-            .zoom(22.0)
+            .zoom(15.0)
             //.tilt(60.00)
             .build()
-
         mapboxMap.cameraPosition = position
 
         mapboxMap?.setStyle(Style.MAPBOX_STREETS, object: Style.OnStyleLoaded {
             override fun onStyleLoaded(style: Style) {
-                /* ================== 카메라 target ======================== */
-                // 카메라 zoom 설정 -> 적용 안됨
-//                val position = CameraPosition.Builder()
-//                    .target(LatLng(loclist.pairList[0].second, loclist.pairList[0].first))
-//                    .zoom(22.0)
-//                    .tilt(60.00)
-//                    .build()
-//                mapboxMap?.animateCamera(CameraUpdateFactory.newCameraPosition(position), 7000)
-
                 // 언어 설정
                 localizationPlugin = LocalizationPlugin(mapView!!, mapboxMap, style)
                 localizationPlugin!!.setMapLanguage(MapLocale.KOREA)
 
-                // 마커 추가
-                symbolManager = SymbolManager(mapView!!, mapboxMap, style)
-                symbolManager!!.iconAllowOverlap = true
-                symbolManager!!.textAllowOverlap = true
+//                // 마커 추가
+//                symbolManager = SymbolManager(mapView!!, mapboxMap, style)
+//                symbolManager!!.iconAllowOverlap = true
+//                symbolManager!!.textAllowOverlap = true
 
-                if(resultGetList.size > 1){
+                if(resultGetList.size > 1){ // 서버에서 받은 결과가 2이상이면 (위험요소 좌표,이미지 리스트)
                     for(i in 0..resultGetList.size-1){
-                        symbol = symbolManager!!.create(
+                        val reuseSymbolManager = SymbolManager(mapView!!, mapboxMap, style)
+                        reuseSymbolManager!!.iconAllowOverlap = true
+                        reuseSymbolManager!!.textAllowOverlap = true
+
+                        //================== 위험요소 마커 추가 ======================//
+                        val symbol = reuseSymbolManager!!.create(
                             SymbolOptions()
                                 .withLatLng(LatLng(resultGetList[i].location[1],resultGetList[i].location[0]))
-                                //.withLatLng(LatLng(37.547147, 127.074148)) //위험 요소 마커 추가
+                                //.withLatLng(LatLng(37.547147, 127.074148))
                                 .withIconImage(MAKI_ICON_HARBOR)
                                 .withIconSize(2.0f)
                         )
+                        reuseSymbolManager!!.addClickListener(object : OnSymbolClickListener {
+                            override fun onAnnotationClick(symbol: Symbol): Boolean {
+                                Toast.makeText(
+                                    this@MapActivity,
+                                    "click marker symbol", Toast.LENGTH_SHORT
+                                ).show()
+                                //클릭된 심볼이 ressultGetList에 있으면 좌표,이미지 인텐트로 넘기기기 - 함수로
+                                val results = checkClickedSymbol(symbol.latLng)
+                                //symbol.iconImage = MAKI_ICON_CAFE
+                                //symbolManager!!.update(symbol)
+                                //changeActivity(symbol.latLng,resultGetList[0].image)
+                                return true
+                            }
+                        })
                     }
-
                 } else if(resultGetList.size == 1) {
-                    symbol = symbolManager!!.create(
+                    val reuseSymbolManager2 = SymbolManager(mapView!!, mapboxMap, style)
+                    //================== 위험요소 마커 추가 ======================//
+                    val symbol2 = reuseSymbolManager2.create(
                         SymbolOptions()
                             .withLatLng(LatLng(resultGetList[0].location[1],resultGetList[0].location[0]))
                             //.withLatLng(LatLng(37.547147, 127.074148)) //위험 요소 마커 추가
                             .withIconImage(MAKI_ICON_HARBOR)
                             .withIconSize(2.0f)
                     )
-            }
-
-            // symbolManager.addclicklistener 추가
-            addSymbolListener(resultList)
-
-//            symbolManager!!.addClickListener(object : OnSymbolClickListener {
-//                override fun onAnnotationClick(symbol: Symbol): Boolean {
-//                    Toast.makeText(
-//                        this@MapActivity,
-//                        "click marker symbol", Toast.LENGTH_SHORT
-//                    ).show()
-//                    //클릭된 심볼이 ressultGetList에 있으면 좌표,이미지 인텐트로 넘기기기 - 함수로
-//                    val results = checkClickedSymbol(symbol.latLng)
-////                        for(i in 0..resultGetList.size-1){
-////                            Toast.makeText(
-////                                this@MapActivity,
-////                                i.toString()+"번째 데이터와 동일", Toast.LENGTH_SHORT
-////                            ).show()
-////                            if( LatLng(resultGetList[i].location[1],resultGetList[i].location[0] )==symbol.latLng){
-////                                changeActivity(symbol.latLng,resultGetList[i].image)
-////                            }
-////                        }
-//                    //symbol.iconImage = MAKI_ICON_CAFE
-//                    //symbolManager!!.update(symbol)
-//                    //changeActivity(symbol.latLng,resultGetList[0].image)
-//                    return true
-//                }
-//            })
-
+                    reuseSymbolManager2!!.addClickListener(object : OnSymbolClickListener {
+                        override fun onAnnotationClick(symbol: Symbol): Boolean {
+                            Toast.makeText(
+                                this@MapActivity,
+                                "click marker symbol", Toast.LENGTH_SHORT
+                            ).show()
+                            //클릭된 심볼이 ressultGetList에 있으면 좌표,이미지 인텐트로 넘기기기 - 함수로
+                            val results = checkClickedSymbol(symbol.latLng)
+                            return true
+                        }
+                    })
+                }
             enableLocationComponent(style)
             // 길찾기 polyline 추가
             style.addSource(
@@ -319,7 +295,11 @@ class MapActivity : AppCompatActivity(),PermissionsListener,OnMapReadyCallback,M
     private fun changeActivity(location: LatLng, imgstr:String) {
         val i = Intent(this,MarkerResultActivity::class.java)
         i.putExtra("markerLocation", location.toString())
-        i.putExtra("imageString",imgstr)
+//        i.putExtra("imageString",imgstr)
+
+        val decodedBytes = Base64.decode(imgstr,0)
+        //val bitmap = BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)
+        i.putExtra("image",decodedBytes)
         startActivity(i)
     }
 
@@ -355,7 +335,7 @@ class MapActivity : AppCompatActivity(),PermissionsListener,OnMapReadyCallback,M
                     .build()
             )
 
-// Enable to make component visible
+        // Enable to make component visible
             if (ActivityCompat.checkSelfPermission(
                     this,
                     Manifest.permission.ACCESS_FINE_LOCATION
@@ -376,7 +356,7 @@ class MapActivity : AppCompatActivity(),PermissionsListener,OnMapReadyCallback,M
             locationComponent.isLocationComponentEnabled = true
 
 // Set the component's camera mode
-            locationComponent.cameraMode = CameraMode.TRACKING
+            //locationComponent.cameraMode = CameraMode.TRACKING
 
 // Set the component's render mode
             locationComponent.renderMode = RenderMode.COMPASS

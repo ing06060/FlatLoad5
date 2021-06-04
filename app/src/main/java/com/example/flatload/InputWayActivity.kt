@@ -4,10 +4,7 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.BitmapFactory
-import android.location.Address
 import android.location.Geocoder
-import android.location.Location
 import android.os.Bundle
 import android.os.Looper
 import android.util.Log
@@ -16,11 +13,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import com.google.android.gms.location.*
 import com.google.android.gms.maps.model.LatLng
-import com.google.gson.GsonBuilder
 import com.mapbox.api.directions.v5.DirectionsCriteria
 import com.mapbox.api.directions.v5.MapboxDirections
 import com.mapbox.api.directions.v5.models.DirectionsResponse
-import com.mapbox.api.directions.v5.models.DirectionsRoute
 import com.mapbox.api.geocoding.v5.GeocodingCriteria
 import com.mapbox.api.geocoding.v5.MapboxGeocoding
 import com.mapbox.api.geocoding.v5.models.GeocodingResponse
@@ -30,8 +25,6 @@ import org.json.JSONObject
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
-import retrofit2.Retrofit
-import retrofit2.converter.gson.GsonConverterFactory
 import java.util.*
 import kotlin.math.roundToInt
 
@@ -41,10 +34,12 @@ class InputWayActivity : AppCompatActivity() { //출발지 도착지 입력 화�
     var loc= LatLng(0.0,0.0)
     var locationCallback: LocationCallback?=null
     var locationRequest: LocationRequest?=null
-    var pairList = mutableListOf<Pair<Double,Double>>()
 
+    var pairList = mutableListOf<Pair<Double,Double>>()
     lateinit var PointList:ArrayList<Point>
 
+    lateinit var startPoint:Point
+    lateinit var endPoint:Point
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -75,8 +70,8 @@ class InputWayActivity : AppCompatActivity() { //출발지 도착지 입력 화�
             val end = editTextEnd.text.toString()
 
             if(start.isNotEmpty() && end.isNotEmpty()) {
-                val result =Geocoding(start)
-                Geocoding(end)
+                startGeocoding(start)
+                endGeocoding(end)
                 //Log.d("포인트리스트 확인",PointList.toString())
             }else{
                 Toast.makeText(this,"위치를 입력해주세요", Toast.LENGTH_LONG).show()
@@ -96,9 +91,21 @@ class InputWayActivity : AppCompatActivity() { //출발지 도착지 입력 화�
 
     private fun savePointToList(point: Point){
         PointList.add(point)
+        if(PointList.size == 2){
+            getRoute(PointList[0], PointList[1])
+        }
     }
 
-    private fun Geocoding(strlocation: String):Int {
+    private fun saveStartPoint(point: Point){
+        startPoint = point
+    }
+
+    private fun saveEndPoint(point: Point){
+        endPoint = point
+    }
+
+
+    private fun startGeocoding(strlocation: String) {
         val mapboxGeocoding = MapboxGeocoding.builder()
             .accessToken(getString(R.string.access_token))
             .query(strlocation)
@@ -110,11 +117,10 @@ class InputWayActivity : AppCompatActivity() { //출발지 도착지 입력 화�
                     val firstResultPoint = results[0].center()
                     Log.d("geocoding확인", "onResponse: " + firstResultPoint!!.toString())
                     //results[0].center()?.let { saveStartPoint(it) }
+                    saveStartPoint(firstResultPoint)
                     results[0].center()?.let { savePointToList(it) }
                     Log.d("포인트리스트 확인 in enqueue",PointList.toString())
-                    if(PointList.size == 2){
-                        getRoute(PointList[0], PointList[1])
-                    }
+
                 } else {
                     Log.d("geocoding확인", "onResponse: No result found")
                 }
@@ -123,8 +129,34 @@ class InputWayActivity : AppCompatActivity() { //출발지 도착지 입력 화�
                 throwable.printStackTrace()
             }
         })
-        return 1
+
     }
+
+    private fun endGeocoding(strlocation: String) {
+        val mapboxGeocoding = MapboxGeocoding.builder()
+            .accessToken(getString(R.string.access_token))
+            .query(strlocation)
+            .build()
+        mapboxGeocoding.enqueueCall(object : Callback<GeocodingResponse> {
+            override fun onResponse(call: Call<GeocodingResponse>, response: Response<GeocodingResponse>) {
+                val results = response.body()!!.features()
+                if (results.size > 0) {
+                    val firstResultPoint = results[0].center()
+                    Log.d("geocoding확인", "onResponse: " + firstResultPoint!!.toString())
+                    //results[0].center()?.let { saveStartPoint(it) }
+                    saveEndPoint(firstResultPoint)
+                    results[0].center()?.let { savePointToList(it) }
+                    Log.d("포인트리스트 확인 in enqueue",PointList.toString())
+                } else {
+                    Log.d("geocoding확인", "onResponse: No result found")
+                }
+            }
+            override fun onFailure(call: Call<GeocodingResponse>, throwable: Throwable) {
+                throwable.printStackTrace()
+            }
+        })
+    }
+
 
     private fun ReverseGeocoding(longitude: Double, latitude: Double) {
         val mapboxGeocoding = MapboxGeocoding.builder()
@@ -223,10 +255,6 @@ class InputWayActivity : AppCompatActivity() { //출발지 도착지 입력 화�
                     }
                 }
                 Log.i("이동거리,소요시간 출력", distance_km.toString() +"km, "+duration_min.toString()+"분")
-                var a: String = ""
-//                for(i in 0..pairList.size-1){
-//                    a = a + pairList.get(i).toString() + "\n"
-//                }
                 textviewJSONText?.setText(pairList.toString()) //textview로 띄움
                 flag=1
                 val result = checkDistance(distance_km)
@@ -262,6 +290,8 @@ class InputWayActivity : AppCompatActivity() { //출발지 도착지 입력 화�
             i.putExtra("pairList", PairList(pairList))
             //i.putExtra("resultGet",ResultGetList(resultGet))
             //i.putExtra("startPoint",startPoint.toString())
+            i.putExtra("start",PointIntent(startPoint))
+            i.putExtra("end",PointIntent(endPoint))
             startActivity(i)
         }
     }
