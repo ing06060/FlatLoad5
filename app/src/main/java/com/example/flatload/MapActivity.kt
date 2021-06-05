@@ -4,6 +4,7 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.Resources
 import android.graphics.Color
 import android.location.Location
 import android.os.Bundle
@@ -49,7 +50,12 @@ import retrofit2.Response
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 
-class MapActivity : AppCompatActivity(),PermissionsListener,OnMapReadyCallback,MapboxMap.OnMapClickListener {
+import com.mapbox.mapboxsdk.style.layers.PropertyFactory.iconAllowOverlap
+import com.mapbox.mapboxsdk.style.layers.PropertyFactory.iconIgnorePlacement
+import com.mapbox.mapboxsdk.style.layers.PropertyFactory.iconImage
+
+
+class MapActivity : AppCompatActivity(),PermissionsListener,OnMapReadyCallback{//,MapboxMap.OnMapClickListener {
 
     private var mapView: MapView? = null
     private lateinit var routeCoordinates: ArrayList<Point>
@@ -67,7 +73,7 @@ class MapActivity : AppCompatActivity(),PermissionsListener,OnMapReadyCallback,M
 
     private var localizationPlugin: LocalizationPlugin? = null
 
-    val BASE_URL_FLAT_API = "http://10.0.2.2:3000" //"http://15.164.166.74:8080"(민영) //"http://10.0.2.2:3000"(에뮬레이터-로컬서버 통신)
+    val BASE_URL_FLAT_API = "http://10.0.2.2:3000"//"http://52.79.240.204:8080" //"http://15.164.166.74:8080"(민영) //"http://10.0.2.2:3000"(에뮬레이터-로컬서버 통신)
     val gson = GsonBuilder().setLenient().create()
     val retrofit = Retrofit.Builder()
         .baseUrl(BASE_URL_FLAT_API)
@@ -112,8 +118,11 @@ class MapActivity : AppCompatActivity(),PermissionsListener,OnMapReadyCallback,M
     private fun sendToServer(pairList: List<Pair<Double, Double>>) {
         var LocList = mutableListOf<Location>()
         Log.d("pairList 확인:",pairList.toString() )
-        val callPostJson = api.postJson(pairList)
 
+//        for (i in 0..pairList.size-1){
+//            pairList[i]= Pair<pairList[i].second,pairList[i].first>
+//        }
+        val callPostJson = api.postJson(pairList)
         callPostJson.enqueue(object : Callback<List<ResultGet>> {
             override fun onFailure(call: Call<List<ResultGet>>, t: Throwable) {
                 Log.d("결과:", "실패 : $t")
@@ -123,7 +132,6 @@ class MapActivity : AppCompatActivity(),PermissionsListener,OnMapReadyCallback,M
                 call: Call<List<ResultGet>>,
                 response: Response<List<ResultGet>>
             ) {
-
                 Log.d("결과", "성공 : ${response.raw()}")
                 Log.d("출력", "성공 :" + response?.body().toString())
                 //resultMsgFromServer(response?.body().toString())
@@ -132,6 +140,7 @@ class MapActivity : AppCompatActivity(),PermissionsListener,OnMapReadyCallback,M
             }
         })
     }
+    @SuppressLint("LogNotTimber")
     private fun saveResultGet(body: List<ResultGet>?) {
         if (body != null) {
             resultList = body
@@ -191,8 +200,8 @@ class MapActivity : AppCompatActivity(),PermissionsListener,OnMapReadyCallback,M
         /* ==================== 카메라 target =============== */
         val position = CameraPosition.Builder()
             .target(startPoint) //출발지로 바꾸기
-            .zoom(15.0)
-            //.tilt(60.00)
+            .zoom(18.0)
+            .tilt(60.00)
             .build()
         mapboxMap.cameraPosition = position
 
@@ -213,14 +222,24 @@ class MapActivity : AppCompatActivity(),PermissionsListener,OnMapReadyCallback,M
                         reuseSymbolManager!!.iconAllowOverlap = true
                         reuseSymbolManager!!.textAllowOverlap = true
 
+
                         //================== 위험요소 마커 추가 ======================//
                         val symbol = reuseSymbolManager!!.create(
                             SymbolOptions()
                                 .withLatLng(LatLng(resultGetList[i].location[1],resultGetList[i].location[0]))
                                 //.withLatLng(LatLng(37.547147, 127.074148))
                                 .withIconImage(MAKI_ICON_HARBOR)
+//                                .withIconImage(
+//                                    BitmapFactory.decodeResource(
+//                                        applicationContext.resources, R.drawable.mapbox_marker_icon_default)
+//                                        .toString()
+//                                )
                                 .withIconSize(2.0f)
                         )
+//                        symbol.iconImage =  BitmapFactory.decodeResource(
+//                                        applicationContext.resources, R.drawable.mapbox_marker_icon_default)
+//                                        .toString()
+
                         reuseSymbolManager!!.addClickListener(object : OnSymbolClickListener {
                             override fun onAnnotationClick(symbol: Symbol): Boolean {
                                 Toast.makeText(
@@ -275,22 +294,22 @@ class MapActivity : AppCompatActivity(),PermissionsListener,OnMapReadyCallback,M
                         PropertyFactory.lineWidth(5f),
                         PropertyFactory.lineColor(Color.parseColor("#e55e5e"))
                     ))
-                mapboxMap.addOnMapClickListener(this@MapActivity)
+                //mapboxMap.addOnMapClickListener(this@MapActivity)
             }
         })
     }
 
 
-    /* ================== 카메라 target ======================== */
-    override fun onMapClick(point: LatLng): Boolean { // 현재는 지도 클릭하면 출발지로 animateCamera되게 해놓음
-        val position = CameraPosition.Builder()
-                    .target(startPoint) //출발지로 바꾸기
-                    .zoom(22.0)
-                    //.tilt(60.00)
-                    .build()
-        mapboxMap?.animateCamera(CameraUpdateFactory.newCameraPosition(position), 7000)
-        return true
-    }
+//    /* ================== 카메라 target ======================== */
+//    override fun onMapClick(point: LatLng): Boolean { // 현재는 지도 클릭하면 출발지로 animateCamera되게 해놓음
+//        val position = CameraPosition.Builder()
+//                    .target(startPoint) //출발지로 바꾸기
+//                    .zoom(22.0)
+//                    //.tilt(60.00)
+//                    .build()
+//        mapboxMap?.animateCamera(CameraUpdateFactory.newCameraPosition(position), 7000)
+//        return true
+//    }
 
     private fun changeActivity(location: LatLng, imgstr:String) {
         val i = Intent(this,MarkerResultActivity::class.java)
